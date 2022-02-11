@@ -4,8 +4,14 @@ import math
 import matplotlib.pyplot as plt
 from enum import Enum
 
-BALL_MARK_EXIST_THRESHOLD = 125
-BALL_MARK_STEADY_FRAMES = 15
+BALL_MARK_EXIST_THRESHOLD = 125  # pixel threshold to find ball marks
+BALL_MARK_STEADY_FRAMES = 3  # no change in ball for steady frames
+
+# control by UI on the first frames when detection the ball
+HOUGH_TH1 = 50
+HOUGH_TH2 = 40
+HOUGH_MIN_RAD = 30
+HOUGH_MAX_RAD = 50
 
 
 class BallPos(Enum):
@@ -15,8 +21,15 @@ class BallPos(Enum):
     EMPTY = 4
 
 
+class Debug(Enum):
+    NONE = 0
+    PRINT = 1
+    PLOT = 2
+    SAVE_IMG = 3
+
+
 class BallSpeed:
-    def __init__(self, fps, debug=False):
+    def __init__(self, fps, debug=Debug.NONE):
         self.debug = debug
         self.fps = fps
         self.window = int(fps)
@@ -27,11 +40,15 @@ class BallSpeed:
 
     def debug_plot_speed(self):
         plt.plot(self.speeds)
-        plt.ylabel('RPC')
-        plt.ylabel('frame')
+        plt.ylabel('RPS')
+        plt.xlabel('frame')
         plt.show()
 
     def process(self, img):
+        """
+        :param img: image from camera
+        :return: current frame's speed
+        """
         self.frame_idx += 1
         ball = self.__get_ball(img)
         if ball is None:
@@ -76,9 +93,11 @@ class BallSpeed:
         """
         gim = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         circles = cv2.HoughCircles(gim, cv2.HOUGH_GRADIENT, 1, 20,
-                                   param1=50, param2=40, minRadius=30, maxRadius=50)
+                                   param1=HOUGH_TH1, param2=HOUGH_TH2,
+                                   minRadius=HOUGH_MIN_RAD,
+                                   maxRadius=HOUGH_MAX_RAD)
         if circles is None:
-            if self.debug:
+            if self.debug == Debug.PRINT:
                 print('didnt found circle')
             return None
         circles = np.uint16(np.around(circles))[0, :]
@@ -86,10 +105,11 @@ class BallSpeed:
         cv2.circle(im, (x, y), r, (0, 0, 0), 3)
         ball = gim[y - r:y + r, x - r:x + r]
 
-        if self.debug:
+        if self.debug == Debug.PRINT:
             print('circles found:', len(circles))
             print(x, y, r)
-            # cv2.imwrite('frames/big/{}.jpg'.format(self.frame), ball)
+        if self.debug == Debug.SAVE_IMG:
+            cv2.imwrite('frames/big/{}.jpg'.format(self.frame_idx), ball)
         return ball
 
     def __get_ball_position(self, ball) -> BallPos:
@@ -102,7 +122,7 @@ class BallSpeed:
         tone_map = (np.array(range(256)) < BALL_MARK_EXIST_THRESHOLD) * 255
         bin_marks = tone_map[ball.astype(int)].astype(int)
 
-        if self.debug:
+        if self.debug == Debug.PLOT:
             plt.imshow(bin_marks, cmap='gray')
             plt.show()
 
